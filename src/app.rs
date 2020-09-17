@@ -1,5 +1,5 @@
 use cocoa::appkit::{NSApp, NSApplication};
-use cocoa::base::{id, nil, selector, NO, SEL, YES};
+use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSDictionary, NSString, NSUInteger};
 use objc::declare::ClassDecl;
 use objc::rc::autoreleasepool;
@@ -10,10 +10,10 @@ use std::{mem, ops::Deref, raw};
 
 bitflags::bitflags! {
     struct NSKeyValueObservingOptions: NSUInteger {
-        const New = 0x01;
-        const Old = 0x02;
-        const Initial = 0x04;
-        const Prior = 0x08;
+        const NEW = 0x01;
+        const OLD = 0x02;
+        const INITIAL = 0x04;
+        const PRIOR = 0x08;
     }
 }
 
@@ -162,29 +162,41 @@ pub enum Appearance {
     Dark,
 }
 
-pub unsafe fn run(
+use std::fmt;
+impl fmt::Display for Appearance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Appearance::Light => write!(f, "light"),
+            Appearance::Dark => write!(f, "dark"),
+        }
+    }
+}
+
+pub fn run(
     trigger_initially: bool,
     switch_callback: impl Fn(Appearance) + 'static,
 ) -> Result<(), Error> {
     autoreleasepool(|| {
-        let app = NSApp();
-        app.setActivationPolicy_(
-            cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited,
-        );
-        let effectiveAppearance = NSString::alloc(nil).init_str("effectiveAppearance");
-        let options = NSKeyValueObservingOptions::New;
-        let on_change = move |appearance: id| {
-            if appearance.is_null() {
-                return;
+        unsafe {
+            let app = NSApp();
+            app.setActivationPolicy_(
+                cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited,
+            );
+            let effectiveAppearance = NSString::alloc(nil).init_str("effectiveAppearance");
+            let options = NSKeyValueObservingOptions::NEW;
+            let on_change = move |appearance: id| {
+                if appearance.is_null() {
+                    return;
+                }
+                switch_callback(is_dark_mode(appearance))
+            };
+            if trigger_initially {
+                let appearance: id = msg_send![app, effectiveAppearance];
+                on_change(appearance);
             }
-            switch_callback(is_dark_mode(appearance))
-        };
-        if trigger_initially {
-            let appearance: id = msg_send![app, effectiveAppearance];
-            on_change(appearance);
+            let _observer = KeyValueObserver::observe(app, effectiveAppearance, options, on_change)?;
+            app.run();
+            Ok(())
         }
-        let _observer = KeyValueObserver::observe(app, effectiveAppearance, options, on_change)?;
-        app.run();
-        Ok(())
     })
 }

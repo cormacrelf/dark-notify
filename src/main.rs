@@ -10,31 +10,42 @@ use anyhow::Error;
 use std::process::{Command, Stdio};
 use structopt::StructOpt;
 
+/// Watcher for macOS 10.14+ light/dark mode changes
 #[derive(StructOpt)]
 struct Options {
+    /// Get the current appearance, print it or execute the command once, and exit.
+    #[structopt(short = "e", long = "exit")]
+    exit: bool,
+
+    /// Run a command instead of printing
     #[structopt(short = "c")]
     command: Option<String>,
+
+    /// Does not print the initial value, only prints actual changes.
+    #[structopt(short = "o", long = "only-changes")]
+    only_changes: bool,
 }
 
 fn main() -> Result<(), Error> {
     let options = Options::from_args();
-    unsafe {
-        app::run(true, move |appearance| {
-            if let Some(command) = options.command.as_ref() {
-                let cmd = format!("{} {:?}", command, appearance);
-                let result = Command::new("sh")
-                    .arg("-c")
-                    .arg(&cmd)
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .spawn();
-                match result {
-                    Ok(_) => {}
-                    Err(_) => {}
-                }
-            } else {
-                println!("{:?}", appearance);
+    app::run(!options.only_changes || options.exit, move |appearance| {
+        if let Some(command) = options.command.as_ref() {
+            let cmd = format!("{} {}", command, appearance);
+            let result = Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn();
+            match result {
+                Ok(_) => {}
+                Err(_) => {}
             }
-        })
-    }
+        } else {
+            println!("{}", appearance);
+        }
+        if options.exit {
+            std::process::exit(0);
+        }
+    })
 }
