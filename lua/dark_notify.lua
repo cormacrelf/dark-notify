@@ -3,15 +3,25 @@ function trim6(s)
    return s:match'^()%s*$' and '' or s:match'^%s*(.*%S)'
 end
 
-function get_config()
-  return vim.g.dark_switcher_config or {}
+-- See https://github.com/neovim/neovim/issues/12544
+-- neovim 0.5.0 will have vim.g.variable_name, but let's target 0.4.4 as it's already released
+function mk_config()
+  local exists = vim.api.nvim_call_function("exists", {"dark_notify_config"})
+  if exists ~= 1 then
+    vim.api.nvim_set_var("dark_notify_config", {})
+  end
 end
 
--- See https://github.com/neovim/neovim/issues/12544
+function get_config()
+  mk_config()
+  return vim.api.nvim_get_var("dark_notify_config")
+end
+
 function edit_config(fn)
-  local edit = vim.g.dark_switcher_config or {}
+  mk_config()
+  local edit = vim.api.nvim_get_var("dark_notify_config")
   fn(edit)
-  vim.g.dark_switcher_config = edit
+  vim.api.nvim_set_var("dark_notify_config", edit)
 end
 
 function apply_mode(mode)
@@ -28,7 +38,7 @@ function apply_mode(mode)
 
   -- now try to reload lightline
   local reloader = config.lightline_loaders[lltheme]
-  local lightline = vim.call("exists", "g:loaded_lightline")
+  local lightline = vim.api.nvim_call_function("exists", {"g:loaded_lightline"})
 
   if lightline == 1 then
     local update = false

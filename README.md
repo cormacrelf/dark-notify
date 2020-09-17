@@ -12,7 +12,9 @@ brew install cormacrelf/tap/dark-notify
 
 ## Neovim usage
 
-Then add a plugin with your favourite plugin manager:
+Requires neovim 0.4.4 or later.
+
+Add a plugin with your favourite plugin manager:
 
 ```vim
 Plug 'cormacrelf/dark-notify'
