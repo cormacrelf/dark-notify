@@ -176,22 +176,30 @@ function stop()
   -- config gets edited from there
 end
 
+function configure(config)
+  if config == nil then
+    return
+  end
+  local lightline_loaders = config.lightline_loaders or {}
+  local schemes = config.schemes or {}
+
+  for _, mode in pairs({ "light", "dark" }) do
+    if type(schemes[mode]) == "string" then
+      schemes[mode] = { colorscheme = schemes[mode] }
+    end
+  end
+
+  edit_config(function (conf)
+    conf.lightline_loaders = lightline_loaders
+    conf.schemes = schemes
+  end)
+end
+
 function run(config)
   if config ~= nil or get_config().schemes == nil then
+    -- if it's nil, it's a first run, so configure with no options.
     config = config or {}
-    local lightline_loaders = config.lightline_loaders or {}
-    local schemes = config.schemes or {}
-
-    for _, mode in pairs({ "light", "dark" }) do
-      if type(schemes[mode]) == "string" then
-        schemes[mode] = { colorscheme = schemes[mode] }
-      end
-    end
-
-    edit_config(function (conf)
-      conf.lightline_loaders = lightline_loaders
-      conf.schemes = schemes
-    end)
+    configure(config)
   end
 
   local config = get_config()
@@ -212,6 +220,7 @@ return {
   set_mode = set_mode,
   toggle = toggle,
   stop = stop,
+  configure = configure,
 }
 
 -- init.lua or init.vim in a lua <<EOF

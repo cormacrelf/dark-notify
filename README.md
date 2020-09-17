@@ -83,6 +83,18 @@ You can put those in mappings if you want.
 nmap <f5> :lua require('dark_notify').toggle()<cr>
 ```
 
+### What if I just want the toggle functionality / am not on macOS?
+
+Use the configure function instead.
+
+```vim
+:lua <<EOF
+require('dark_notify').configure({
+    -- same options as run({ ... })
+})
+EOF
+```
+
 ## Command line usage
 
 ```sh
