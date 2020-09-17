@@ -16,6 +16,7 @@ jobs:
           echo ::set-output name=name::${GITHUB_REF#refs/*/}
           echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
           echo ::set-output name=tag::${GITHUB_REF#refs/tags/}
+          echo ::set-output name=tag_unprefixed::${GITHUB_REF#refs/tags/v}
 
       - uses: actions/checkout@v2
       - name: Install latest nightly
@@ -66,7 +67,7 @@ jobs:
         run: |
           brew tap cormacrelf/tap
           brew bump-formula-pr -f --no-browse --no-audit \
-            --version='${{ steps.push.outputs.tag }}' \
+            --version='${{ steps.push.outputs.tag_unprefixed }}' \
             --sha256='${{ steps.archive.outputs.shasum }}' \
             --url='${{ steps.upload_release_asset.outputs.browser_download_url }}' \
             cormacrelf/tap/dark-notify
