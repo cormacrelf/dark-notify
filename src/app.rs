@@ -43,13 +43,12 @@ lazy_static::lazy_static! {
 
         // type NSKeyValueChangeKey = id /* NSString */;
         fn emit(callback: &dyn Fn(id), changes: impl NSDictionary) {
-            autoreleasepool(|| {
-                let new_value = unsafe {
-                    let new_key = NSString::alloc(nil).init_str("new").autorelease();
-                    changes.valueForKey_(new_key)
-                };
-                callback(new_value);
-            });
+            let new_value = unsafe {
+                let new_key = StrongPtr::new(NSString::alloc(nil).init_str("new"));
+                changes.valueForKey_(*new_key.deref())
+            };
+
+            callback(new_value);
         }
 
         // Add an ObjC method for getting the number
@@ -143,10 +142,8 @@ extern "C" {
     static NSAppearanceNameDarkAqua: id;
 }
 
-fn is_dark_mode(appearance: id) -> Appearance {
+fn is_dark_mode(names: id, appearance: id) -> Appearance {
     unsafe {
-        let names =
-            NSArray::arrayWithObjects(nil, &[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]);
         let best_match: id = msg_send![appearance, bestMatchFromAppearancesWithNames: names];
         if best_match == NSAppearanceNameDarkAqua {
             Appearance::Dark
@@ -176,27 +173,28 @@ pub fn run(
     trigger_initially: bool,
     switch_callback: impl Fn(Appearance) + 'static,
 ) -> Result<(), Error> {
-    autoreleasepool(|| {
-        unsafe {
-            let app = NSApp();
-            app.setActivationPolicy_(
-                cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited,
-            );
-            let effectiveAppearance = NSString::alloc(nil).init_str("effectiveAppearance");
-            let options = NSKeyValueObservingOptions::NEW;
-            let on_change = move |appearance: id| {
-                if appearance.is_null() {
-                    return;
-                }
-                switch_callback(is_dark_mode(appearance))
-            };
-            if trigger_initially {
-                let appearance: id = msg_send![app, effectiveAppearance];
-                on_change(appearance);
+    autoreleasepool(|| unsafe {
+        let app = NSApp();
+        app.setActivationPolicy_(
+            cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited,
+        );
+        let effectiveAppearance = NSString::alloc(nil).init_str("effectiveAppearance");
+        let options = NSKeyValueObservingOptions::NEW;
+        let names =
+            NSArray::arrayWithObjects(nil, &[NSAppearanceNameAqua, NSAppearanceNameDarkAqua])
+                .autorelease();
+        let on_change = move |appearance: id| {
+            if appearance.is_null() {
+                return;
             }
-            let _observer = KeyValueObserver::observe(app, effectiveAppearance, options, on_change)?;
-            app.run();
-            Ok(())
+            switch_callback(is_dark_mode(names, appearance))
+        };
+        if trigger_initially {
+            let appearance: id = msg_send![app, effectiveAppearance];
+            on_change(appearance);
         }
+        let _observer = KeyValueObserver::observe(app, effectiveAppearance, options, on_change)?;
+        app.run();
+        Ok(())
     })
 }
