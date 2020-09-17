@@ -46,11 +46,37 @@ function apply_mode(mode)
       vim.api.nvim_command("call lightline#update()")
     end
   end
+
+  edit_config(function (conf)
+    conf.current_mode = mode
+  end)
 end
 
 function apply_current_mode()
   local mode = vim.fn.system('dark-notify --exit')
   mode = trim6(mode)
+  apply_mode(mode)
+end
+
+function set_mode(mode)
+  mode = trim6(mode)
+  if not (mode == "light" or mode == "dark") then
+    error("mode must be either \"light\" or \"dark\"" .. mode)
+    return
+  end
+  apply_mode(mode)
+end
+
+function toggle()
+  local mode = get_config().current_mode
+  if mode == "light" then
+    mode = "dark"
+  elseif mode == "dark" then
+    mode = "light"
+  else
+    apply_current_mode()
+    return
+  end
   apply_mode(mode)
 end
 
@@ -127,7 +153,12 @@ function run(config)
   end
 end
 
-return { run=run, update=apply_current_mode }
+return {
+  run = run,
+  update = apply_current_mode,
+  set_mode = set_mode,
+  toggle = toggle
+}
 
 -- init.lua or init.vim in a lua <<EOF
 -- require('dark_notify').run({
