@@ -38,13 +38,15 @@ local dn = require('dark_notify')
 
 -- Configure
 dn.run({
-    schemes {
+    schemes = {
       -- you can use a different colorscheme for each
       dark  = "dark colorscheme name",
       -- even a different `set background=light/dark` setting or lightline theme
+      -- if you use lightline, you may want to configure lightline themes,
+      -- even if they're the same one, especially if the theme reacts to :set bg
       light = {
-        name = "light scheme name",
-        background = "either light or dark",
+        colorscheme = "light scheme name",
+        background = "override to either light or dark",
         lightline = "set your lightline theme name here"
       }
     },

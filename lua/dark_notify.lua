@@ -27,13 +27,13 @@ end
 function apply_mode(mode)
   local config = get_config()
   local sel = config.schemes[mode] or {}
-  local name = sel.name or nil
+  local colorscheme = sel.colorscheme or nil
   local bg = sel.background or mode
   local lltheme = sel.lightline or nil
 
   vim.api.nvim_command('set background=' .. bg)
-  if name ~= nil then
-    vim.api.nvim_command('colorscheme ' .. name)
+  if colorscheme ~= nil then
+    vim.api.nvim_command('colorscheme ' .. colorscheme)
   end
 
   -- now try to reload lightline
@@ -147,7 +147,7 @@ function run(config)
 
   for _, mode in pairs({ "light", "dark" }) do
     if type(schemes[mode]) == "string" then
-      schemes[mode] = { name = schemes[mode] }
+      schemes[mode] = { colorscheme = schemes[mode] }
     end
   end
 
@@ -180,8 +180,8 @@ return {
 --  lightline_loaders = {
 --    my_colorscheme = "path_to_my_colorscheme's lightline autoload file"
 --  },
---  schemes {
+--  schemes = {
 --    dark  = "dark colorscheme name",
---    light = { name = "light scheme name", background = "optional override, either light or dark" }
+--    light = { colorscheme = "light scheme name", background = "optional override, either light or dark" }
 --  }
 -- })
