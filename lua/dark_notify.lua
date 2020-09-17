@@ -1,3 +1,8 @@
+-- http://lua-users.org/wiki/StringTrim
+function trim6(s)
+   return s:match'^()%s*$' and '' or s:match'^%s*(.*%S)'
+end
+
 function get_config()
   return vim.g.dark_switcher_config or {}
 end
@@ -7,6 +12,46 @@ function edit_config(fn)
   local edit = vim.g.dark_switcher_config or {}
   fn(edit)
   vim.g.dark_switcher_config = edit
+end
+
+function apply_mode(mode)
+  local config = get_config()
+  local sel = config.schemes[mode] or {}
+  local name = sel.name or nil
+  local bg = sel.background or mode
+  local lltheme = sel.lightline or nil
+
+  vim.api.nvim_command('set background=' .. bg)
+  if name ~= nil then
+    vim.api.nvim_command('colorscheme ' .. name)
+  end
+
+  -- now try to reload lightline
+  local reloader = config.lightline_loaders[lltheme]
+  local lightline = vim.call("exists", "g:loaded_lightline")
+
+  if lightline == 1 then
+    local update = false
+    if lltheme ~= nil then
+      vim.api.nvim_command("let g:lightline.colorscheme = \"" .. lltheme .. "\"")
+      update = true
+    end
+    if reloader ~= nil then
+      vim.api.nvim_command("source " .. reloader)
+      update = true
+    end
+    if update then
+      vim.api.nvim_command("call lightline#init()")
+      vim.api.nvim_command("call lightline#colorscheme()")
+      vim.api.nvim_command("call lightline#update()")
+    end
+  end
+end
+
+function apply_current_mode()
+  local mode = vim.fn.system('dark-notify --exit')
+  mode = trim6(mode)
+  apply_mode(mode)
 end
 
 function init_dark_notify()
@@ -23,35 +68,12 @@ function init_dark_notify()
   local function onread(err, chunk)
     assert(not err, err)
     if (chunk) then
-      local config = get_config()
-      local mode
-      if chunk == "Light\n" then
-        mode = "light"
-      elseif chunk == "Dark\n" then
-        mode = "dark"
-      else
+      local mode = trim6(chunk)
+      if not (mode == "light" or mode == "dark") then
         error("dark-notify output not expected: " .. chunk)
         return
       end
-      local sel = config.schemes[mode] or {}
-      name = sel.name or nil
-      bg = sel.background or mode
-
-      vim.api.nvim_command('set background=' .. bg)
-      if name ~= nil then
-        vim.api.nvim_command('colorscheme ' .. name)
-      end
-
-      -- now try to reload lightline
-      name = name or vim.g.colors_name
-      local reloader = config.lightline_loaders[name]
-      local lightline = vim.call("exists", "g:loaded_lightline")
-
-      if lightline == 1 and reloader ~= nil then
-        vim.api.nvim_command("source " .. reloader)
-        vim.api.nvim_command("call lightline#colorscheme()")
-      end
-    else
+      apply_mode(mode)
     end
   end
 
@@ -100,10 +122,12 @@ function run(config)
 
   if not get_config().initialized then
     init_dark_notify()
+  else
+    apply_current_mode()
   end
 end
 
-return { run=run }
+return { run=run, update=apply_current_mode }
 
 -- init.lua or init.vim in a lua <<EOF
 -- require('dark_notify').run({
