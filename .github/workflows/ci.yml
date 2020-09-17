@@ -1,0 +1,25 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches:
+      # Delete whichever of these you aren't using.
+      - master
+
+jobs:
+
+  # Jobs go here. Most of is article is about things
+  # to put in this section.
+  build-macos:
+    name: "Build on macOS"
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            override: true
+            # components: rustfmt, clippy
+      - run: cargo check
+
