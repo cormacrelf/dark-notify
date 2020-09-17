@@ -4,6 +4,8 @@ It's a program for watching when macOS switches to dark mode. Useful for making
 your text editor switch to a dark theme. Includes a Neovim (Lua) plugin to do 
 exactly that.
 
+![Demo gif](demo.gif)
+
 ## Install
 
 ```sh
