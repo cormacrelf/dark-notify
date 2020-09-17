@@ -146,10 +146,15 @@ function run(config)
     conf.schemes = schemes
   end)
 
-  if not get_config().initialized then
+  local config = get_config()
+  if not config.initialized then
+    -- first run on startup, also happens to apply current mode
     init_dark_notify()
-  else
-    apply_current_mode()
+  elseif config.current_mode ~= nil then
+    -- we have run it before, but we're updating the settings
+    -- so don't reset to system, but do apply changed config.
+    local mode = config.current_mode
+    apply_mode(mode)
   end
 end
 
