@@ -3,6 +3,22 @@ function trim6(s)
    return s:match'^()%s*$' and '' or s:match'^%s*(.*%S)'
 end
 
+-- from norcalli/nvim_utils
+function nvim_create_augroups(definitions)
+  for group_name, definition in pairs(definitions) do
+    vim.api.nvim_command('augroup '..group_name)
+    vim.api.nvim_command('autocmd!')
+    for _, def in ipairs(definition) do
+      -- if type(def) == 'table' and type(def[#def]) == 'function' then
+      -- 	def[#def] = lua_callback(def[#def])
+      -- end
+      local command = table.concat(vim.tbl_flatten{'autocmd', def}, ' ')
+      vim.api.nvim_command(command)
+    end
+    vim.api.nvim_command('augroup END')
+  end
+end
+
 -- See https://github.com/neovim/neovim/issues/12544
 -- neovim 0.5.0 will have vim.g.variable_name, but let's target 0.4.4 as it's already released
 function mk_config()
@@ -93,13 +109,21 @@ end
 function init_dark_notify()
   -- Docs on this vim.loop stuff: https://github.com/luvit/luv
 
-  local function onclose()
-  end
-
   local handle, pid
   local stdout = vim.loop.new_pipe(false)
-  local stderr = vim.loop.new_pipe(false)
   local stdin = vim.loop.new_pipe(false)
+
+  local function onexit()
+    vim.loop.close(handle, vim.schedule_wrap(function()
+      vim.loop.shutdown(stdout)
+      vim.loop.shutdown(stdin)
+      edit_config(function (conf)
+        conf.initialized = false
+        conf.pid = nil
+        conf.stdin_fd = nil
+      end)
+    end))
+  end
 
   local function onread(err, chunk)
     assert(not err, err)
@@ -113,48 +137,62 @@ function init_dark_notify()
     end
   end
 
-  local function onshutdown(err)
-    if err == "ECANCELED" then
-      return
-    end
-    vim.loop.close(handle, onclose)
-    edit_config(function (conf)
-      conf.initialized = false
-    end)
-  end
-
-  local function onexit()
-    edit_config(function (conf)
-      conf.initialized = false
-    end)
-  end
-
   handle, pid = vim.loop.spawn(
     "dark-notify",
-    { stdio = {stdin, stdout, stderr} },
+    { stdio = {stdin, stdout, nil} },
     vim.schedule_wrap(onexit)
   )
 
   vim.loop.read_start(stdout, vim.schedule_wrap(onread))
+
+  local stdin_fd = vim.loop.fileno(stdin)
+
   edit_config(function (conf)
     conf.initialized = true
+    conf.pid = pid
+    conf.stdin_fd = stdin_fd
   end)
+
+  -- For whatever reason, nvim isn't killing child processes properly on exit
+  -- So if you don't do this, you get zombie dark-notify processes hanging about.
+  nvim_create_augroups({
+    DarkNotifyKillChildProcess = {
+      { "VimLeave", "*", "lua require('dark_notify').stop()" },
+    }
+  })
+end
+
+-- For whatever reason, killing the child process doesn't work, at all. So we
+-- send it the line "quit\n", and it kills itself.
+function stop()
+  local conf = get_config()
+  if conf.stdin_fd == nil then
+    return
+  end
+  local stdin_pipe = vim.loop.new_pipe(false);
+  vim.loop.pipe_open(stdin_pipe, get_config().stdin_fd)
+  vim.loop.write(stdin_pipe, "quit\n")
+  -- process quits itself, calls onexit
+  -- config gets edited from there
 end
 
 function run(config)
-  local lightline_loaders = config.lightline_loaders or {}
-  local schemes = config.schemes or {}
+  if config ~= nil or get_config().schemes == nil then
+    config = config or {}
+    local lightline_loaders = config.lightline_loaders or {}
+    local schemes = config.schemes or {}
 
-  for _, mode in pairs({ "light", "dark" }) do
-    if type(schemes[mode]) == "string" then
-      schemes[mode] = { colorscheme = schemes[mode] }
+    for _, mode in pairs({ "light", "dark" }) do
+      if type(schemes[mode]) == "string" then
+        schemes[mode] = { colorscheme = schemes[mode] }
+      end
     end
-  end
 
-  edit_config(function (conf)
-    conf.lightline_loaders = lightline_loaders
-    conf.schemes = schemes
-  end)
+    edit_config(function (conf)
+      conf.lightline_loaders = lightline_loaders
+      conf.schemes = schemes
+    end)
+  end
 
   local config = get_config()
   if not config.initialized then
@@ -172,7 +210,8 @@ return {
   run = run,
   update = apply_current_mode,
   set_mode = set_mode,
-  toggle = toggle
+  toggle = toggle,
+  stop = stop,
 }
 
 -- init.lua or init.vim in a lua <<EOF

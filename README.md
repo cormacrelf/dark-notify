@@ -69,6 +69,12 @@ dn.toggle()
 
 -- Match the system
 dn.update()
+
+-- Stop reacting to changes
+dn.stop()
+
+-- Start reacting again, with previous settings
+dn.run()
 ```
 
 You can put those in mappings if you want.
