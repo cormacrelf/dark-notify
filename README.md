@@ -58,7 +58,13 @@ dn.run({
         my_ll_theme_name = "path to a lightline autoload file",
         -- example
         github = (vim.g.plug_home .. "/vim-colors-github/autoload/lightline/colorscheme/github.vim")
-    }
+    },
+    onchange = function(mode)
+        -- optional, you can configure your own things to react to changes.
+        -- this is called at startup and every time dark mode is switched,
+        -- either via the OS, or because you manually set/toggled the mode.
+        -- mode is either "light" or "dark"
+    end,
 })
 
 -- Draw the blinds for now

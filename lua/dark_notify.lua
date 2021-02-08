@@ -19,28 +19,34 @@ function nvim_create_augroups(definitions)
   end
 end
 
--- See https://github.com/neovim/neovim/issues/12544
--- neovim 0.5.0 will have vim.g.variable_name, but let's target 0.4.4 as it's already released
-function mk_config()
-  local exists = vim.api.nvim_call_function("exists", {"dark_notify_config"})
-  if exists ~= 1 then
-    vim.api.nvim_set_var("dark_notify_config", {})
+
+
+local state = {
+  initialized = false,
+  pid = -1,
+  stdin_handle = nil,
+  config = {},
+}
+
+local M = {}
+
+local function ensure_config()
+  if state.config == nil then
+    state.config = {}
   end
 end
 
-function get_config()
-  mk_config()
-  return vim.api.nvim_get_var("dark_notify_config")
+local function get_config()
+  ensure_config()
+  return state.config
 end
 
-function edit_config(fn)
-  mk_config()
-  local edit = vim.api.nvim_get_var("dark_notify_config")
-  fn(edit)
-  vim.api.nvim_set_var("dark_notify_config", edit)
+local function edit_config(fn)
+  ensure_config()
+  fn(state.config)
 end
 
-function apply_mode(mode)
+local function apply_mode(mode)
   local config = get_config()
   local sel = config.schemes[mode] or {}
   local colorscheme = sel.colorscheme or nil
@@ -73,18 +79,20 @@ function apply_mode(mode)
     end
   end
 
-  edit_config(function (conf)
-    conf.current_mode = mode
-  end)
+  if config.onchange ~= nil then
+    config.onchange(mode)
+  end
+
+  state.current_mode = mode
 end
 
-function apply_current_mode()
+function M.update()
   local mode = vim.fn.system('dark-notify --exit')
   mode = trim6(mode)
   apply_mode(mode)
 end
 
-function set_mode(mode)
+function M.set_mode(mode)
   mode = trim6(mode)
   if not (mode == "light" or mode == "dark") then
     error("mode must be either \"light\" or \"dark\"" .. mode)
@@ -93,20 +101,20 @@ function set_mode(mode)
   apply_mode(mode)
 end
 
-function toggle()
-  local mode = get_config().current_mode
+function M.toggle()
+  local mode = state.current_mode
   if mode == "light" then
     mode = "dark"
   elseif mode == "dark" then
     mode = "light"
   else
-    apply_current_mode()
+    M.update()
     return
   end
   apply_mode(mode)
 end
 
-function init_dark_notify()
+local function init_dark_notify()
   -- Docs on this vim.loop stuff: https://github.com/luvit/luv
 
   local handle, pid
@@ -117,11 +125,9 @@ function init_dark_notify()
     vim.loop.close(handle, vim.schedule_wrap(function()
       vim.loop.shutdown(stdout)
       vim.loop.shutdown(stdin)
-      edit_config(function (conf)
-        conf.initialized = false
-        conf.pid = nil
-        conf.stdin_fd = nil
-      end)
+      state.initialized = false
+      state.pid = nil
+      state.stdin_handle = nil
     end))
   end
 
@@ -145,13 +151,9 @@ function init_dark_notify()
 
   vim.loop.read_start(stdout, vim.schedule_wrap(onread))
 
-  local stdin_fd = vim.loop.fileno(stdin)
-
-  edit_config(function (conf)
-    conf.initialized = true
-    conf.pid = pid
-    conf.stdin_fd = stdin_fd
-  end)
+  state.initialized = true
+  state.pid = pid
+  state.stdin_handle = stdin
 
   -- For whatever reason, nvim isn't killing child processes properly on exit
   -- So if you don't do this, you get zombie dark-notify processes hanging about.
@@ -164,24 +166,22 @@ end
 
 -- For whatever reason, killing the child process doesn't work, at all. So we
 -- send it the line "quit\n", and it kills itself.
-function stop()
-  local conf = get_config()
-  if conf.stdin_fd == nil then
+function M.stop()
+  if state.stdin_handle == nil then
     return
   end
-  local stdin_pipe = vim.loop.new_pipe(false);
-  vim.loop.pipe_open(stdin_pipe, get_config().stdin_fd)
-  vim.loop.write(stdin_pipe, "quit\n")
+  vim.loop.write(state.stdin_handle, "quit\n")
   -- process quits itself, calls onexit
   -- config gets edited from there
 end
 
-function configure(config)
+function M.configure(config)
   if config == nil then
     return
   end
   local lightline_loaders = config.lightline_loaders or {}
   local schemes = config.schemes or {}
+  local onchange = config.onchange
 
   for _, mode in pairs({ "light", "dark" }) do
     if type(schemes[mode]) == "string" then
@@ -192,36 +192,30 @@ function configure(config)
   edit_config(function (conf)
     conf.lightline_loaders = lightline_loaders
     conf.schemes = schemes
+    conf.onchange = onchange
   end)
 end
 
-function run(config)
+function M.run(config)
   if config ~= nil or get_config().schemes == nil then
     -- if it's nil, it's a first run, so configure with no options.
     config = config or {}
-    configure(config)
+    M.configure(config)
   end
 
   local config = get_config()
   if not config.initialized then
     -- first run on startup, also happens to apply current mode
     init_dark_notify()
-  elseif config.current_mode ~= nil then
+  elseif state.current_mode ~= nil then
     -- we have run it before, but we're updating the settings
     -- so don't reset to system, but do apply changed config.
-    local mode = config.current_mode
+    local mode = state.current_mode
     apply_mode(mode)
   end
 end
 
-return {
-  run = run,
-  update = apply_current_mode,
-  set_mode = set_mode,
-  toggle = toggle,
-  stop = stop,
-  configure = configure,
-}
+return M
 
 -- init.lua or init.vim in a lua <<EOF
 -- require('dark_notify').run({
@@ -231,5 +225,7 @@ return {
 --  schemes = {
 --    dark  = "dark colorscheme name",
 --    light = { colorscheme = "light scheme name", background = "optional override, either light or dark" }
---  }
+--  },
+--  onchange = function(mode)
+--  end,
 -- })
