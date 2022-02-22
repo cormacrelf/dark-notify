@@ -6,7 +6,7 @@ use objc::rc::autoreleasepool;
 use objc::rc::{StrongPtr, WeakPtr};
 use objc::runtime::{Class, Object, Sel};
 
-use std::{mem, ops::Deref, raw};
+use std::ops::Deref;
 
 bitflags::bitflags! {
     struct NSKeyValueObservingOptions: NSUInteger {
@@ -19,17 +19,10 @@ bitflags::bitflags! {
 
 use anyhow::Error;
 
-fn get_callback(self_obj: &Object) -> *mut dyn Fn(id) {
-    unsafe {
-        let data: *mut libc::c_void = *self_obj.get_ivar("_data");
-        let vtable: *mut libc::c_void = *self_obj.get_ivar("_vtable");
-        let trait_obj = raw::TraitObject {
-            data: data.cast::<()>(),
-            vtable: vtable.cast::<()>(),
-        };
-        let callback: &mut dyn Fn(id) = mem::transmute(trait_obj);
-        callback as *mut dyn Fn(id)
-    }
+unsafe fn get_callback(self_obj: &Object) -> *mut Box<dyn Fn(id)> {
+    let data: *mut libc::c_void = *self_obj.get_ivar("_boxed");
+    let callback = data.cast::<Box<dyn Fn(id)>>();
+    callback
 }
 
 lazy_static::lazy_static! {
@@ -37,9 +30,8 @@ lazy_static::lazy_static! {
         let superclass = class!(NSObject);
         let mut decl = ClassDecl::new("RustKVOHelper", superclass).unwrap();
 
-        // Stores a Box<dyn Fn(id)> -> raw::TraitObject.
-        decl.add_ivar::<*mut libc::c_void>("_data");
-        decl.add_ivar::<*mut libc::c_void>("_vtable");
+        // Stores a Box<Box<dyn Fn(id)>> -> *mut c_void
+        decl.add_ivar::<*mut libc::c_void>("_boxed");
 
         // type NSKeyValueChangeKey = id /* NSString */;
         fn emit(callback: &dyn Fn(id), changes: impl NSDictionary) {
@@ -97,12 +89,11 @@ impl KeyValueObserver {
             ));
         }
         unsafe {
-            let boxed = Box::new(closure);
-            let callback: *const dyn Fn(*mut Object) = Box::into_raw(boxed);
-            let trait_obj: raw::TraitObject = mem::transmute(callback);
+            let fat_closure: Box<dyn Fn(id)> = Box::new(closure);
+            let boxed = Box::new(fat_closure);
+            let callback = Box::into_raw(boxed);
             let observer: id = msg_send![*RUST_KVO_HELPER, new];
-            (*observer).set_ivar("_data", trait_obj.data.cast::<libc::c_void>());
-            (*observer).set_ivar("_vtable", trait_obj.vtable.cast::<libc::c_void>());
+            (*observer).set_ivar("_boxed", callback.cast::<libc::c_void>());
             let _: libc::c_void = msg_send![object,
                 addObserver: observer
                  forKeyPath: key_path

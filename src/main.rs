@@ -1,4 +1,3 @@
-#![feature(raw)]
 #![allow(non_snake_case)]
 
 mod app;
