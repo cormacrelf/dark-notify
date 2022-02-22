@@ -1,3 +1,5 @@
+local DARK_NOTIFY_EXECUTABLE = "dark-notify"
+
 -- http://lua-users.org/wiki/StringTrim
 function trim6(s)
    return s:match'^()%s*$' and '' or s:match'^%s*(.*%S)'
@@ -19,12 +21,11 @@ function nvim_create_augroups(definitions)
   end
 end
 
-
-
 local state = {
   initialized = false,
   pid = -1,
-  stdin_handle = nil,
+  handle = nil,
+  stdout = nil,
   config = {},
 }
 
@@ -87,7 +88,7 @@ local function apply_mode(mode)
 end
 
 function M.update()
-  local mode = vim.fn.system('dark-notify --exit')
+  local mode = vim.fn.system(DARK_NOTIFY_EXECUTABLE .. " --exit")
   mode = trim6(mode)
   apply_mode(mode)
 end
@@ -114,21 +115,35 @@ function M.toggle()
   apply_mode(mode)
 end
 
+local function shutdown_child()
+  if state.handle and not state.handle:is_closing() then
+    if not state.exited then
+      state.handle:kill(15) -- SIGTERM
+      state.exited = true
+    end
+    state.stdout:shutdown(function()
+      -- luv says closing a file handle is synchronous
+      state.stdout:close()
+      -- closing a process handle is not
+      state.handle:close(function()
+        state.initialized = false
+        state.pid = nil
+        state.stdout = nil
+        state.handle = nil
+      end)
+    end)
+  end
+end
+
 local function init_dark_notify()
   -- Docs on this vim.loop stuff: https://github.com/luvit/luv
 
   local handle, pid
-  local stdout = vim.loop.new_pipe(false)
-  local stdin = vim.loop.new_pipe(false)
+  local stdout = vim.loop.new_pipe()
 
   local function onexit()
-    vim.loop.close(handle, vim.schedule_wrap(function()
-      vim.loop.shutdown(stdout)
-      vim.loop.shutdown(stdin)
-      state.initialized = false
-      state.pid = nil
-      state.stdin_handle = nil
-    end))
+    state.exited = true
+    shutdown_child()
   end
 
   local function onread(err, chunk)
@@ -143,17 +158,16 @@ local function init_dark_notify()
     end
   end
 
-  handle, pid = vim.loop.spawn(
-    "dark-notify",
-    { stdio = {stdin, stdout, nil} },
-    vim.schedule_wrap(onexit)
-  )
+  state.initialized = true
+
+  handle, pid = vim.loop.spawn(DARK_NOTIFY_EXECUTABLE, { stdio = { nil, stdout, nil } }, vim.schedule_wrap(onexit))
 
   vim.loop.read_start(stdout, vim.schedule_wrap(onread))
 
-  state.initialized = true
   state.pid = pid
-  state.stdin_handle = stdin
+  state.stdout = stdout
+  state.handle = handle
+  state.exited = false
 
   -- For whatever reason, nvim isn't killing child processes properly on exit
   -- So if you don't do this, you get zombie dark-notify processes hanging about.
@@ -164,15 +178,8 @@ local function init_dark_notify()
   })
 end
 
--- For whatever reason, killing the child process doesn't work, at all. So we
--- send it the line "quit\n", and it kills itself.
 function M.stop()
-  if state.stdin_handle == nil then
-    return
-  end
-  vim.loop.write(state.stdin_handle, "quit\n")
-  -- process quits itself, calls onexit
-  -- config gets edited from there
+  shutdown_child()
 end
 
 function M.configure(config)
