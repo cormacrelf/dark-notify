@@ -4,29 +4,29 @@ mod app;
 
 use anyhow::Error;
 use std::process::{Command, Stdio};
-use structopt::StructOpt;
+use clap::Parser;
 
 /// Watcher for macOS 10.14+ light/dark mode changes
 ///
 /// Will print "light" or "dark" as it changes. By default, it also prints the current appearance
 /// at startup. Use Ctrl-C to exit.
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct Options {
     /// Get the current appearance, print it or execute the command once, and exit.
-    #[structopt(short = "e", long = "exit")]
+    #[arg(short = 'e', long = "exit")]
     exit: bool,
 
     /// Run a command instead of printing
-    #[structopt(short = "c")]
+    #[arg(short = 'c')]
     command: Option<String>,
 
     /// Does not print the initial value, only prints actual changes.
-    #[structopt(short = "o", long = "only-changes")]
+    #[arg(short = 'o', long = "only-changes")]
     only_changes: bool,
 }
 
 fn main() -> Result<(), Error> {
-    let options = Options::from_args();
+    let options = Options::parse();
     app::run(!options.only_changes || options.exit, move |appearance| {
         if let Some(command) = options.command.as_ref() {
             let cmd = format!("{} {}", command, appearance);
