@@ -19,22 +19,31 @@ jobs:
           echo ::set-output name=tag_unprefixed::${GITHUB_REF#refs/tags/v}
 
       - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: nightly
-            override: true
+      - name: Rustup
+        run: rustup show
 
-      - name: Run cargo build --release
+      - name: Run cargo build --release [x86]
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release
+          args: --release --target x86_64-apple-darwin
+
+      - name: Run cargo build --release [aarch64]
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target aarch64-apple-darwin
+
+      - name: lipo
+        run: |
+          lipo -create \
+            -output dark-notify \
+            target/x86_64-apple-darwin/release/dark-notify \
+            target/aarch64-apple-darwin/release/dark-notify
 
       - name: Homebrew archive and shasum
         id: archive
         run: |
-          cd target/release
           tar -czf dark-notify-${{ steps.push.outputs.tag }}.tar.gz dark-notify
           SUM=$(shasum -a 256 dark-notify-${{ steps.push.outputs.tag }}.tar.gz | awk '{print $1}')
           echo "::set-output name=shasum::$SUM"
@@ -57,7 +66,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/dark-notify-${{ steps.push.outputs.tag }}.tar.gz
+          asset_path: dark-notify-${{ steps.push.outputs.tag }}.tar.gz
           asset_name: dark-notify-${{ steps.push.outputs.tag }}.tar.gz
           asset_content_type: application/gzip
 

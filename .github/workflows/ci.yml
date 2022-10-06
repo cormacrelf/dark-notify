@@ -15,11 +15,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
+      - name: Rustup
+        run: rustup show
+      - uses: actions-rs/cargo@v1
         with:
-            toolchain: nightly
-            override: true
-            # components: rustfmt, clippy
-      - run: cargo check
+          command: check
 
