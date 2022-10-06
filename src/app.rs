@@ -1,4 +1,4 @@
-use anyhow::Error;
+use core::ffi;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(i32)]
@@ -19,18 +19,18 @@ impl fmt::Display for Appearance {
 }
 
 extern "C" {
-    fn observer_new(callback: *mut libc::c_void, trigger_initially: bool) -> *mut libc::c_void;
-    fn observer_run(observer: *mut libc::c_void);
-    fn observer_get_callback(observer: *mut libc::c_void) -> *mut libc::c_void;
-    fn observer_free(observer: *mut libc::c_void);
+    fn observer_new(callback: *mut ffi::c_void, trigger_initially: bool) -> *mut ffi::c_void;
+    fn observer_run(observer: *mut ffi::c_void);
+    fn observer_get_callback(observer: *mut ffi::c_void) -> *mut ffi::c_void;
+    fn observer_free(observer: *mut ffi::c_void);
 }
 
 struct SwiftObserver {
-    obj: *mut libc::c_void,
+    obj: *mut ffi::c_void,
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn call_boxed_callback(ptr: *mut libc::c_void, appearance: Appearance) {
+pub unsafe extern "C" fn call_boxed_callback(ptr: *mut ffi::c_void, appearance: Appearance) {
     let callback = ptr.cast::<Box<dyn Fn(Appearance)>>();
     (*callback)(appearance);
 }
@@ -41,7 +41,7 @@ impl SwiftObserver {
         let boxed = Box::new(fat_closure);
         let callback = Box::into_raw(boxed);
         let observer = unsafe {
-            let raw = callback.cast::<libc::c_void>();
+            let raw = callback.cast::<ffi::c_void>();
             observer_new(raw, trigger_initially)
         };
         SwiftObserver { obj: observer }
@@ -78,11 +78,7 @@ impl Drop for SwiftObserver {
     }
 }
 
-pub fn run(
-    trigger_initially: bool,
-    switch_callback: impl Fn(Appearance) + 'static,
-) -> Result<(), Error> {
+pub fn run(trigger_initially: bool, switch_callback: impl Fn(Appearance) + 'static) {
     let observer = SwiftObserver::new(switch_callback, trigger_initially);
     observer.run();
-    Ok(())
 }

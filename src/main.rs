@@ -2,9 +2,8 @@
 
 mod app;
 
-use anyhow::Error;
-use std::process::{Command, Stdio};
 use clap::Parser;
+use std::process::{Command, Stdio};
 
 /// Watcher for macOS 10.14+ light/dark mode changes
 ///
@@ -25,7 +24,7 @@ struct Options {
     only_changes: bool,
 }
 
-fn main() -> Result<(), Error> {
+fn main() {
     let options = Options::parse();
     app::run(!options.only_changes || options.exit, move |appearance| {
         if let Some(command) = options.command.as_ref() {
