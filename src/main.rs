@@ -2,10 +2,7 @@
 
 mod app;
 
-#[macro_use]
-extern crate objc;
 use anyhow::Error;
-
 use std::process::{Command, Stdio};
 use structopt::StructOpt;
 
