@@ -26,6 +26,10 @@ struct Options {
     /// Does not print the initial value, only prints actual changes.
     #[structopt(short = "o", long = "only-changes")]
     only_changes: bool,
+
+    /// Disable listening to the `quit` command.
+    #[structopt(short = "n", long = "no-input")]
+    no_input: bool,
 }
 
 fn handle_quit() -> Result<(), Error> {
@@ -43,7 +47,9 @@ fn handle_quit() -> Result<(), Error> {
 
 fn main() -> Result<(), Error> {
     let options = Options::from_args();
-    handle_quit()?;
+    if !options.no_input {
+        handle_quit()?;
+    }
     app::run(!options.only_changes || options.exit, move |appearance| {
         if let Some(command) = options.command.as_ref() {
             let cmd = format!("{} {}", command, appearance);
