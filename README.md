@@ -124,3 +124,5 @@ $ dark-notify -c 'python3 my-script.py'
 
 `dark-notify -h` for more options.
 
+## Related tools
+* [erikw/tmux-dark-notify](https://github.com/erikw/tmux-dark-notify) - this tmux plugin uses `dark-notify` to make tmux's theme follow macOS dark/light mode.
