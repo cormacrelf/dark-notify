@@ -88,8 +88,7 @@ end
 
 function M.update()
   local mode = vim.fn.system('dark-notify --exit')
-  mode = trim6(mode)
-  apply_mode(mode)
+  M.set_mode(mode)
 end
 
 function M.set_mode(mode)
@@ -102,16 +101,16 @@ function M.set_mode(mode)
 end
 
 function M.toggle()
-  local mode = state.current_mode
+  -- current_mode may not be set, especially if you're not on macOS and aren't using the dark-notify watcher
+  -- if it isn't, just pick up the current background that vim has set.
+  -- if it is, then use the current_mode in preference because people can configure things like
+  -- dark mode (in dark-notify config) is actually some colorscheme with `bg=light`.
+  local mode = state.current_mode or vim.o.background
   if mode == "light" then
-    mode = "dark"
+    apply_mode("dark")
   elseif mode == "dark" then
-    mode = "light"
-  else
-    M.update()
-    return
+    apply_mode("light")
   end
-  apply_mode(mode)
 end
 
 local function init_dark_notify()
