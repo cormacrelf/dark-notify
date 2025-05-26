@@ -6,7 +6,7 @@ use objc::rc::autoreleasepool;
 use objc::rc::{StrongPtr, WeakPtr};
 use objc::runtime::{Class, Object, Sel};
 
-use std::{mem, ops::Deref, raw};
+use std::ops::Deref;
 
 bitflags::bitflags! {
     struct NSKeyValueObservingOptions: NSUInteger {
@@ -19,17 +19,12 @@ bitflags::bitflags! {
 
 use anyhow::Error;
 
-fn get_callback(self_obj: &Object) -> *mut dyn Fn(id) {
-    unsafe {
-        let data: *mut libc::c_void = *self_obj.get_ivar("_data");
-        let vtable: *mut libc::c_void = *self_obj.get_ivar("_vtable");
-        let trait_obj = raw::TraitObject {
-            data: data.cast::<()>(),
-            vtable: vtable.cast::<()>(),
-        };
-        let callback: &mut dyn Fn(id) = mem::transmute(trait_obj);
-        callback as *mut dyn Fn(id)
-    }
+type ObserverCallback = Box<dyn Fn(id)>;
+
+fn get_callback(self_obj: &mut Object) -> &mut dyn Fn(id) {
+    let boxed: *mut libc::c_void = unsafe { *self_obj.get_ivar("_callback") };
+    let callback: *mut ObserverCallback = boxed.cast();
+    unsafe { &mut **callback }
 }
 
 lazy_static::lazy_static! {
@@ -38,8 +33,7 @@ lazy_static::lazy_static! {
         let mut decl = ClassDecl::new("RustKVOHelper", superclass).unwrap();
 
         // Stores a Box<dyn Fn(id)> -> raw::TraitObject.
-        decl.add_ivar::<*mut libc::c_void>("_data");
-        decl.add_ivar::<*mut libc::c_void>("_vtable");
+        decl.add_ivar::<*mut libc::c_void>("_callback");
 
         // type NSKeyValueChangeKey = id /* NSString */;
         fn emit(callback: &dyn Fn(id), changes: impl NSDictionary) {
@@ -53,22 +47,20 @@ lazy_static::lazy_static! {
 
         // Add an ObjC method for getting the number
         extern fn observe(
-            self_obj: &Object,
+            self_obj: &mut Object,
             _self_selector: Sel,
             _key_path: id /* NSString */,
             _of_object: id,
             changes: id, /* NSDictionary<NSKeyValueChangeKey, id> */
             _context: *mut libc::c_void,
         ) {
-            unsafe {
-                let callback = get_callback(self_obj);
-                emit(&*callback, changes)
-            }
+            let callback = get_callback(self_obj);
+            emit(callback, changes)
         }
         unsafe {
             decl.add_method(
                 sel!(observeValueForKeyPath:ofObject:change:context:),
-                observe as extern fn(&Object, Sel, id, id, id, *mut libc::c_void)
+                observe as extern fn(&mut Object, Sel, id, id, id, *mut libc::c_void)
             );
         }
 
@@ -97,22 +89,22 @@ impl KeyValueObserver {
             ));
         }
         unsafe {
-            let boxed = Box::new(closure);
-            let callback: *const dyn Fn(*mut Object) = Box::into_raw(boxed);
-            let trait_obj: raw::TraitObject = mem::transmute(callback);
+            let inner: ObserverCallback = Box::new(closure);
+            let double_boxed = Box::new(inner);
+            let callback: *mut ObserverCallback = Box::into_raw(double_boxed);
+
             let observer: id = msg_send![*RUST_KVO_HELPER, new];
-            (*observer).set_ivar("_data", trait_obj.data.cast::<libc::c_void>());
-            (*observer).set_ivar("_vtable", trait_obj.vtable.cast::<libc::c_void>());
+            (*observer).set_ivar("_callback", callback.cast::<libc::c_void>());
+
             let _: libc::c_void = msg_send![object,
                 addObserver: observer
                  forKeyPath: key_path
                     options: options
                     context: nil
             ];
-            let observed_object = WeakPtr::new(object);
             Ok(KeyValueObserver {
                 observer: StrongPtr::new(observer),
-                observed_object,
+                observed_object: WeakPtr::new(object),
                 key_path,
             })
         }
@@ -130,7 +122,7 @@ impl Drop for KeyValueObserver {
             let observer = *self.observer.deref();
             let _: libc::c_void =
                 msg_send![observed, removeObserver: observer forKeyPath: self.key_path];
-            let callback = get_callback(&*observer);
+            let callback = get_callback(&mut *observer);
             drop(Box::from_raw(callback));
         }
     }
