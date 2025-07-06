@@ -59,6 +59,9 @@ dn.run({
         -- example
         github = (vim.g.plug_home .. "/vim-colors-github/autoload/lightline/colorscheme/github.vim")
     },
+    -- skip setting of background which can break some colorschemes
+    -- defaults to false
+    -- skip_bg = true,
     onchange = function(mode)
         -- optional, you can configure your own things to react to changes.
         -- this is called at startup and every time dark mode is switched,
