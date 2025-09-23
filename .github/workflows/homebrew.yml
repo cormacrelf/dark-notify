@@ -3,72 +3,57 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-    - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
 
 jobs:
   homebrew:
     name: "Create homebrew release"
     runs-on: macos-latest
     steps:
-      - name: Get tag
-        id: push
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
         run: |
-          echo ::set-output name=name::${GITHUB_REF#refs/*/}
-          echo ::set-output name=branch::${GITHUB_REF#refs/heads/}
-          echo ::set-output name=tag::${GITHUB_REF#refs/tags/}
-          echo ::set-output name=tag_unprefixed::${GITHUB_REF#refs/tags/v}
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
 
-      - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: nightly
-            override: true
-
-      - name: Run cargo build --release
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
-
-      - name: Homebrew archive and shasum
+      - name: Create universal binary
         id: archive
         run: |
-          cd target/release
-          tar -czf dark-notify-${{ steps.push.outputs.tag }}.tar.gz dark-notify
-          SUM=$(shasum -a 256 dark-notify-${{ steps.push.outputs.tag }}.tar.gz | awk '{print $1}')
-          echo "::set-output name=shasum::$SUM"
+          lipo -create -output ./dark-notify target/x86_64-apple-darwin/release/dark-notify target/aarch64-apple-darwin/release/dark-notify
+          tar -czvf dark-notify.tar.gz ./dark-notify
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.push.outputs.tag }}
-          release_name: Release ${{ steps.push.outputs.tag }}
-          draft: false
-          prerelease: false
+          SUM=$(shasum -a 256 dark-notify.tar.gz | awk '{print $1}')
+          echo "shasum=$SUM" >> $GITHUB_OUTPUT
 
-      - name: Upload Release Asset
-        id: upload_release_asset 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release
+        id: release
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/dark-notify-${{ steps.push.outputs.tag }}.tar.gz
-          asset_name: dark-notify-${{ steps.push.outputs.tag }}.tar.gz
-          asset_content_type: application/gzip
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: |
+            dark-notify.tar.gz
+          fail_on_unmatched_files: true
+
+      - name: Get asset URL
+        id: get_url
+        run: |
+          URL="${{ fromJson(steps.release.outputs.assets)[0].browser_download_url }}"
+          echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Update Homebrew formula
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.BREW_TOKEN }}
+          VERSION: ${{ github.ref_name }}
         run: |
           brew tap cormacrelf/tap
           brew bump-formula-pr -f --no-browse --no-audit \
-            --version='${{ steps.push.outputs.tag_unprefixed }}' \
-            --sha256='${{ steps.archive.outputs.shasum }}' \
-            --url='${{ steps.upload_release_asset.outputs.browser_download_url }}' \
+            --version="${VERSION#v}" \
+            --sha256="${{ steps.archive.outputs.shasum }}" \
+            --url="${{ steps.get_url.outputs.url }}" \
             cormacrelf/tap/dark-notify
-
