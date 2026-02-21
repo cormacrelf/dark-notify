@@ -126,3 +126,4 @@ $ dark-notify -c 'python3 my-script.py'
 
 ## Related tools
 * [erikw/tmux-dark-notify](https://github.com/erikw/tmux-dark-notify) - this tmux plugin uses `dark-notify` to make tmux's theme follow macOS dark/light mode.
+* [patrik-csak/auto-terminal-profile](https://github.com/patrik-csak/auto-terminal-profile) - this tool uses `dark-notify` to make the macOS Terminal's profile follow macOS dark/light mode.
