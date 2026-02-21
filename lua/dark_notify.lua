@@ -53,6 +53,10 @@ local function apply_mode(mode)
   local bg = sel.background or mode
   local lltheme = sel.lightline or nil
 
+  if config.before ~= nil then
+    config.before(mode)
+  end
+
   vim.api.nvim_command('set background=' .. bg)
   if colorscheme ~= nil then
     vim.api.nvim_command('colorscheme ' .. colorscheme)
@@ -79,9 +83,10 @@ local function apply_mode(mode)
     end
   end
 
-  if config.onchange ~= nil then
-    config.onchange(mode)
+  if config.after ~= nil then
+    config.after(mode)
   end
+
 
   state.current_mode = mode
 end
@@ -181,7 +186,8 @@ function M.configure(config)
   end
   local lightline_loaders = config.lightline_loaders or {}
   local schemes = config.schemes or {}
-  local onchange = config.onchange
+  local before = config.before
+  local after = config.after
 
   for _, mode in pairs({ "light", "dark" }) do
     if type(schemes[mode]) == "string" then
@@ -192,7 +198,8 @@ function M.configure(config)
   edit_config(function (conf)
     conf.lightline_loaders = lightline_loaders
     conf.schemes = schemes
-    conf.onchange = onchange
+    conf.before = before
+    conf.after = after
   end)
 end
 

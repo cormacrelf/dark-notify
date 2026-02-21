@@ -1,7 +1,7 @@
 # dark-notify
 
-It's a program for watching when macOS switches to dark mode. Useful for making 
-your text editor switch to a dark theme. Includes a Neovim (Lua) plugin to do 
+It's a program for watching when macOS switches to dark mode. Useful for making
+your text editor switch to a dark theme. Includes a Neovim (Lua) plugin to do
 exactly that.
 
 ![Demo gif](demo.gif)
@@ -30,7 +30,7 @@ require('dark_notify').run()
 EOF
 ```
 
-By default, this will just execute `:set bg=dark` or `:set bg=light` as soon as 
+By default, this will just execute `:set bg=dark` or `:set bg=light` as soon as
 the system appearance changes.
 
 ### Additional options
@@ -59,11 +59,24 @@ dn.run({
         -- example
         github = (vim.g.plug_home .. "/vim-colors-github/autoload/lightline/colorscheme/github.vim")
     },
-    onchange = function(mode)
-        -- optional, you can configure your own things to react to changes.
-        -- this is called at startup and every time dark mode is switched,
-        -- either via the OS, or because you manually set/toggled the mode.
-        -- mode is either "light" or "dark"
+    -- optionally, you can configure what to do before/after changes.
+    -- this is called at startup and every time dark mode is switched,
+    -- either via the OS, or because you manually set/toggled the mode.
+    -- mode is either "light" or "dark"
+    before = function(mode)
+        -- your logic here
+        if mode == "dark" then
+            -- do something
+        else
+            -- do other thing
+        end
+    end,
+    after = function(mode)
+        if mode == "dark" then
+            -- do something
+        else
+            -- do other thing
+        end
     end,
 })
 
